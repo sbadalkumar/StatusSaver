@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace 'com.inningsstudio.statussaver'
+    namespace 'com.stackstocks.statussaver'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.inningsstudio.statussaver"
+        applicationId "com.stackstocks.statussaver"
         minSdk 30
         targetSdk 34
         versionCode 1

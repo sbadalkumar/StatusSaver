@@ -16,39 +16,39 @@
 # ===========================================
 
 # Keep all data classes and their properties
--keepclassmembers class com.inningsstudio.statussaver.data.model.StatusModel {
+-keepclassmembers class com.stackstocks.statussaver.data.model.StatusModel {
     <init>(...);
     <fields>;
 }
 
--keepclassmembers class com.inningsstudio.statussaver.data.model.SavedStatusModel {
+-keepclassmembers class com.stackstocks.statussaver.data.model.SavedStatusModel {
     <init>(...);
     <fields>;
 }
 
--keepclassmembers class com.inningsstudio.statussaver.domain.entity.StatusEntity {
+-keepclassmembers class com.stackstocks.statussaver.domain.entity.StatusEntity {
     <init>(...);
     <fields>;
 }
 
 # Keep UI state classes
--keepclassmembers class com.inningsstudio.statussaver.presentation.state.StatusUiState {
+-keepclassmembers class com.stackstocks.statussaver.presentation.state.StatusUiState {
     <init>(...);
     <fields>;
 }
 
--keepclassmembers class com.inningsstudio.statussaver.presentation.state.OnboardingUiState {
+-keepclassmembers class com.stackstocks.statussaver.presentation.state.OnboardingUiState {
     <init>(...);
     <fields>;
 }
 
 # Keep all sealed class implementations
--keep class com.inningsstudio.statussaver.presentation.state.StatusUiState$* {
+-keep class com.stackstocks.statussaver.presentation.state.StatusUiState$* {
     <init>(...);
     <fields>;
 }
 
--keep class com.inningsstudio.statussaver.presentation.state.OnboardingUiState$* {
+-keep class com.stackstocks.statussaver.presentation.state.OnboardingUiState$* {
     <init>(...);
     <fields>;
 }
@@ -194,13 +194,13 @@
 }
 
 # Keep custom application class
--keep class com.inningsstudio.statussaver.StatusSaverApplication { *; }
+-keep class com.stackstocks.statussaver.StatusSaverApplication { *; }
 
 # Keep Firebase service
--keep class com.inningsstudio.statussaver.core.service.StatusSaverFirebaseMessagingService { *; }
+-keep class com.stackstocks.statussaver.core.service.StatusSaverFirebaseMessagingService { *; }
 
 # Keep constants
--keep class com.inningsstudio.statussaver.core.constants.** { *; }
+-keep class com.stackstocks.statussaver.core.constants.** { *; }
 
 # Keep ViewModels
 -keep class * extends androidx.lifecycle.ViewModel {
@@ -212,15 +212,15 @@
 }
 
 # Keep Repository implementations
--keep class * implements com.inningsstudio.statussaver.domain.repository.StatusRepository {
+-keep class * implements com.stackstocks.statussaver.domain.repository.StatusRepository {
     <init>(...);
 }
 
 # Keep UseCase classes
--keep class com.inningsstudio.statussaver.domain.usecase.** { *; }
+-keep class com.stackstocks.statussaver.domain.usecase.** { *; }
 
 # Keep utility classes
--keep class com.inningsstudio.statussaver.core.utils.** { *; }
+-keep class com.stackstocks.statussaver.core.utils.** { *; }
 
 # ===========================================
 # OPTIMIZATION RULES

@@ -4,9 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.util.Log
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import com.stackstocks.statussaver.core.logging.AppLogger
+import com.stackstocks.statussaver.core.logging.LogTags
 import com.stackstocks.statussaver.core.utils.FileUtils
 import com.stackstocks.statussaver.core.utils.PreferenceUtils
 import com.stackstocks.statussaver.core.utils.StatusSaver
@@ -78,26 +79,30 @@ fun calculateStatusesHash(statuses: List<StatusModel>): Int {
 // Helper function for video thumbnail generation with timeout protection
 suspend fun getVideoThumbnailIO(context: Context, path: String): Bitmap? {
     return withContext(Dispatchers.IO) {
+        AppLogger.d(LogTags.THUMBNAIL, "Generating thumbnail for: ${path.takeLast(30)}")
         try {
             // Add timeout to prevent hanging on corrupted videos
             withTimeout(5000) { // 5 second timeout per video thumbnail
                 try {
                     val retriever = MediaMetadataRetriever()
                     if (path.startsWith("content://")) {
+                        AppLogger.v(LogTags.THUMBNAIL, "Using content:// URI for thumbnail")
                         retriever.setDataSource(context, Uri.parse(path))
                     } else {
+                        AppLogger.v(LogTags.THUMBNAIL, "Using file path for thumbnail")
                         retriever.setDataSource(path)
                     }
                     val bitmap = retriever.frameAtTime
                     retriever.release()
+                    AppLogger.d(LogTags.THUMBNAIL, "✅ Thumbnail generated successfully")
                     bitmap
                 } catch (e: Exception) {
-                    Log.e("StatusGalleryActivity", "Error generating video thumbnail: ${e.message}")
+                    AppLogger.e(LogTags.THUMBNAIL, "Error generating video thumbnail", e)
                     null
                 }
             }
         } catch (e: TimeoutCancellationException) {
-            Log.e("StatusGalleryActivity", "Video thumbnail generation timeout for: $path")
+            AppLogger.logTimeout(LogTags.THUMBNAIL, "thumbnail generation for ${path.takeLast(30)}", 5000)
             null
         }
     }
@@ -109,32 +114,43 @@ suspend fun loadSavedStatuses(
     currentState: StatusGalleryState,
     onStateUpdate: (StatusGalleryState) -> Unit
 ) {
+    val startTime = System.currentTimeMillis()
+    AppLogger.logMethodEntry(LogTags.STATUS_LOADING, "loadSavedStatuses")
+    
     // Prevent concurrent loading operations
+    AppLogger.logMutexLockAttempt(LogTags.STATUS_LOADING, "savedStatusLoadMutex")
     if (!savedStatusLoadMutex.tryLock()) {
-        Log.d("StatusGalleryActivity", "Saved status load already in progress, skipping")
+        AppLogger.logMutexLockFailed(LogTags.STATUS_LOADING, "savedStatusLoadMutex")
         return
     }
     
+    AppLogger.logMutexLockAcquired(LogTags.STATUS_LOADING, "savedStatusLoadMutex")
+    
     try {
-        Log.d("StatusGalleryActivity", "=== STARTING SAVED STATUS LOADING ===")
+        AppLogger.logSeparator(LogTags.STATUS_LOADING, "LOADING SAVED STATUSES")
+        AppLogger.logLoadingStart(LogTags.STATUS_LOADING, "saved statuses")
+        AppLogger.logStateChange(LogTags.STATUS_LOADING, "isLoadingSaved: false", "isLoadingSaved: true")
         onStateUpdate(currentState.copy(isLoadingSaved = true))
 
         // Add timeout to prevent hanging
+        AppLogger.logTimeoutStart(LogTags.STATUS_LOADING, "loadSavedStatuses", 30000)
         withTimeout(30000) { // 30 second timeout
             try {
-                // Get saved statuses from DCIM folder (excluding favorites)
+                AppLogger.d(LogTags.FILE_SYSTEM, "Fetching saved statuses from DCIM folder...")
                 val savedStatuses = FileUtils.getSavedStatusesFromFolder(context)
-                // Get favorite statuses from favourites folder
+                AppLogger.logLoadingSuccess(LogTags.FILE_SYSTEM, "saved statuses", savedStatuses.size)
+                
+                AppLogger.d(LogTags.FILE_SYSTEM, "Fetching favorites from favourites folder...")
                 val favorites = FileUtils.getFavoriteStatusesFromFolder(context)
-                Log.d("StatusGalleryActivity", "Found ${savedStatuses.size} saved statuses from folder")
-                Log.d("StatusGalleryActivity", "Found ${favorites.size} favorite statuses from folder")
+                AppLogger.logLoadingSuccess(LogTags.FILE_SYSTEM, "favorites", favorites.size)
                 
                 // Calculate hash of new statuses
                 val newHash = calculateSavedStatusesHash(savedStatuses + favorites)
+                AppLogger.d(LogTags.STATUS_LOADING, "Calculated hash: $newHash | Previous hash: ${currentState.lastSavedStatusesHash}")
                 
                 // Only update state if there are actual changes
                 if (newHash != currentState.lastSavedStatusesHash) {
-                    Log.d("StatusGalleryActivity", "Saved statuses changed, updating UI")
+                    AppLogger.i(LogTags.STATUS_LOADING, "Saved statuses changed, updating UI")
                     onStateUpdate(currentState.copy(
                         savedStatusList = savedStatuses,
                         favoriteList = favorites,
@@ -142,24 +158,28 @@ suspend fun loadSavedStatuses(
                         isLoadingSaved = false
                     ))
                 } else {
-                    Log.d("StatusGalleryActivity", "No changes in saved statuses, skipping UI update")
+                    AppLogger.d(LogTags.STATUS_LOADING, "No changes detected, skipping UI update")
                     onStateUpdate(currentState.copy(isLoadingSaved = false))
                 }
                 
-                Log.d("StatusGalleryActivity", "✅ Saved status loading completed successfully")
+                AppLogger.logPerformance(LogTags.STATUS_LOADING, "loadSavedStatuses", startTime)
+                AppLogger.logMethodExit(LogTags.STATUS_LOADING, "loadSavedStatuses", "success")
             } catch (e: Exception) {
-                Log.e("StatusGalleryActivity", "❌ Error loading saved statuses", e)
+                AppLogger.e(LogTags.ERROR, "Error loading saved statuses", e)
+                AppLogger.logLoadingFailure(LogTags.STATUS_LOADING, "saved statuses", e.message ?: "Unknown error")
                 onStateUpdate(currentState.copy(isLoadingSaved = false))
             }
         }
     } catch (e: TimeoutCancellationException) {
-        Log.e("StatusGalleryActivity", "❌ Saved status loading timeout after 30 seconds")
+        AppLogger.logTimeout(LogTags.STATUS_LOADING, "loadSavedStatuses", 30000)
+        AppLogger.e(LogTags.TIMEOUT, "Saved status loading timeout after 30 seconds", e)
         onStateUpdate(currentState.copy(
             isLoadingSaved = false,
             errorMessage = "Loading timeout - please try again"
         ))
     } finally {
         savedStatusLoadMutex.unlock()
+        AppLogger.logMutexLockReleased(LogTags.STATUS_LOADING, "savedStatusLoadMutex")
     }
 }
 
@@ -168,27 +188,37 @@ suspend fun loadStatuses(
     currentState: StatusGalleryState,
     onStateUpdate: (StatusGalleryState) -> Unit
 ) {
+    val startTime = System.currentTimeMillis()
+    AppLogger.logMethodEntry(LogTags.STATUS_LOADING, "loadStatuses")
+    
     // Prevent concurrent loading operations
+    AppLogger.logMutexLockAttempt(LogTags.STATUS_LOADING, "statusLoadMutex")
     if (!statusLoadMutex.tryLock()) {
-        Log.d("StatusGalleryActivity", "Status load already in progress, skipping")
+        AppLogger.logMutexLockFailed(LogTags.STATUS_LOADING, "statusLoadMutex")
         return
     }
     
+    AppLogger.logMutexLockAcquired(LogTags.STATUS_LOADING, "statusLoadMutex")
+    
     try {
-        Log.d("StatusGalleryActivity", "=== STARTING STATUS LOADING ===")
+        AppLogger.logSeparator(LogTags.STATUS_LOADING, "LOADING WHATSAPP STATUSES")
+        AppLogger.logLoadingStart(LogTags.STATUS_LOADING, "WhatsApp statuses")
+        AppLogger.logStateChange(LogTags.STATUS_LOADING, "isLoading: false", "isLoading: true")
         onStateUpdate(currentState.copy(isLoading = true, errorMessage = null))
 
+        AppLogger.d(LogTags.PREFERENCES, "Retrieving SAF URI from preferences...")
         val pref = PreferenceUtils(context.applicationContext as android.app.Application)
         val safUri = pref.getUriFromPreference()
-
-        Log.d("StatusGalleryActivity", "Loading statuses with SAF URI: $safUri")
+        AppLogger.i(LogTags.PREFERENCES, "SAF URI retrieved: ${safUri?.take(50) ?: "null"}")
 
         // Add timeout to prevent hanging
+        AppLogger.logTimeoutStart(LogTags.STATUS_LOADING, "loadStatuses", 30000)
         withTimeout(30000) { // 30 second timeout
             try {
                 // Only check if SAF URI is present
                 if (safUri.isNullOrBlank()) {
-                    Log.e("StatusGalleryActivity", "❌ NO SAF URI - Cannot load statuses")
+                    AppLogger.e(LogTags.ERROR, "❌ NO SAF URI - Cannot load statuses")
+                    AppLogger.w(LogTags.PERMISSION, "SAF permission not granted or URI not saved")
                     onStateUpdate(currentState.copy(
                         errorMessage = "Please grant access to the WhatsApp .Statuses folder in onboarding/settings.",
                         isLoading = false
@@ -196,23 +226,22 @@ suspend fun loadStatuses(
                     return@withTimeout
                 }
 
-                Log.d("StatusGalleryActivity", "Calling FileUtils.getStatus()...")
+                AppLogger.d(LogTags.FILE_SYSTEM, "Calling FileUtils.getStatus() with URI...")
                 val statuses = FileUtils.getStatus(context, safUri ?: "")
-                Log.d(
-                    "StatusGalleryActivity",
-                    "FileUtils.getStatus() returned ${statuses.size} statuses"
-                )
+                AppLogger.logLoadingSuccess(LogTags.FILE_SYSTEM, "raw statuses", statuses.size)
 
+                AppLogger.d(LogTags.STATUS_LOADING, "Filtering statuses with non-empty paths...")
                 val filteredStatuses = statuses.filter { it.filePath.isNotEmpty() }
                     .sortedByDescending { it.lastModified } // Sort by date, latest first
-                Log.d("StatusGalleryActivity", "Filtered to ${filteredStatuses.size} valid statuses")
+                AppLogger.i(LogTags.STATUS_LOADING, "Filtered to ${filteredStatuses.size} valid statuses")
                 
                 // Calculate hash of new statuses
                 val newHash = calculateStatusesHash(filteredStatuses)
+                AppLogger.d(LogTags.STATUS_LOADING, "Calculated hash: $newHash | Previous hash: ${currentState.lastStatusesHash}")
                 
                 // Only update state if there are actual changes
                 if (newHash != currentState.lastStatusesHash) {
-                    Log.d("StatusGalleryActivity", "Statuses changed, updating UI")
+                    AppLogger.i(LogTags.STATUS_LOADING, "Statuses changed, updating UI")
                     onStateUpdate(currentState.copy(
                         statusList = filteredStatuses,
                         lastStatusesHash = newHash,
@@ -220,16 +249,19 @@ suspend fun loadStatuses(
                         isLoading = false
                     ))
                 } else {
-                    Log.d("StatusGalleryActivity", "No changes in statuses, skipping UI update")
+                    AppLogger.d(LogTags.STATUS_LOADING, "No changes detected, skipping UI update")
                     onStateUpdate(currentState.copy(
                         statusesLoaded = true,
                         isLoading = false
                     ))
                 }
-                Log.d("StatusGalleryActivity", "✅ Status loading completed successfully")
+                
+                AppLogger.logPerformance(LogTags.STATUS_LOADING, "loadStatuses", startTime)
+                AppLogger.logMethodExit(LogTags.STATUS_LOADING, "loadStatuses", "success")
 
             } catch (e: Exception) {
-                Log.e("StatusGalleryActivity", "❌ Error loading statuses", e)
+                AppLogger.e(LogTags.ERROR, "Error loading statuses", e)
+                AppLogger.logLoadingFailure(LogTags.STATUS_LOADING, "statuses", e.message ?: "Unknown error")
                 onStateUpdate(currentState.copy(
                     errorMessage = e.message,
                     isLoading = false
@@ -237,13 +269,15 @@ suspend fun loadStatuses(
             }
         }
     } catch (e: TimeoutCancellationException) {
-        Log.e("StatusGalleryActivity", "❌ Status loading timeout after 30 seconds")
+        AppLogger.logTimeout(LogTags.STATUS_LOADING, "loadStatuses", 30000)
+        AppLogger.e(LogTags.TIMEOUT, "Status loading timeout after 30 seconds", e)
         onStateUpdate(currentState.copy(
             errorMessage = "Loading timeout - please try again",
             isLoading = false
         ))
     } finally {
         statusLoadMutex.unlock()
+        AppLogger.logMutexLockReleased(LogTags.STATUS_LOADING, "statusLoadMutex")
     }
 }
 
@@ -274,7 +308,7 @@ suspend fun markAsFavorite(
     onStateUpdate: (StatusGalleryState) -> Unit
 ) {
     try {
-        Log.d("StatusGalleryActivity", "Marking as favorite: ${status.filePath}")
+        AppLogger.d(LogTags.STATUS_SAVING, "Marking as favorite: ${status.filePath}")
         
         // Optimistic UI update - immediately move the item from saved to favorites
         val updatedStatus = status.copy(
@@ -293,10 +327,10 @@ suspend fun markAsFavorite(
         // Perform the actual file operation
         val success = FileUtils.markAsFavorite(context, status.filePath)
         if (success) {
-            Log.d("StatusGalleryActivity", "✅ Status marked as favorite successfully")
+            AppLogger.i(LogTags.STATUS_SAVING, "✅ Status marked as favorite successfully")
             // No need to refresh - optimistic update already handled it
         } else {
-            Log.e("StatusGalleryActivity", "❌ Failed to mark as favorite")
+            AppLogger.e(LogTags.ERROR, "❌ Failed to mark as favorite")
             // Revert optimistic update on failure
             onStateUpdate(currentState.copy(
                 savedStatusList = currentState.savedStatusList,
@@ -304,7 +338,7 @@ suspend fun markAsFavorite(
             ))
         }
     } catch (e: Exception) {
-        Log.e("StatusGalleryActivity", "❌ Error marking as favorite", e)
+        AppLogger.e(LogTags.ERROR, "❌ Error marking as favorite", e)
         // Revert optimistic update on error
         onStateUpdate(currentState.copy(
             savedStatusList = currentState.savedStatusList,
@@ -320,7 +354,7 @@ suspend fun unmarkAsFavorite(
     onStateUpdate: (StatusGalleryState) -> Unit
 ) {
     try {
-        Log.d("StatusGalleryActivity", "Unmarking as favorite: ${status.filePath}")
+        AppLogger.d(LogTags.STATUS_SAVING, "Unmarking as favorite: ${status.filePath}")
         
         // Optimistic UI update - immediately move the item from favorites to saved
         val updatedStatus = status.copy(
@@ -339,10 +373,10 @@ suspend fun unmarkAsFavorite(
         // Perform the actual file operation
         val success = FileUtils.unmarkAsFavorite(context, status.filePath)
         if (success) {
-            Log.d("StatusGalleryActivity", "✅ Status unmarked as favorite successfully")
+            AppLogger.i(LogTags.STATUS_SAVING, "✅ Status unmarked as favorite successfully")
             // No need to refresh - optimistic update already handled it
         } else {
-            Log.e("StatusGalleryActivity", "❌ Failed to unmark as favorite")
+            AppLogger.e(LogTags.ERROR, "❌ Failed to unmark as favorite")
             // Revert optimistic update on failure
             onStateUpdate(currentState.copy(
                 savedStatusList = currentState.savedStatusList,
@@ -350,7 +384,7 @@ suspend fun unmarkAsFavorite(
             ))
         }
     } catch (e: Exception) {
-        Log.e("StatusGalleryActivity", "❌ Error unmarking as favorite", e)
+        AppLogger.e(LogTags.ERROR, "❌ Error unmarking as favorite", e)
         // Revert optimistic update on error
         onStateUpdate(currentState.copy(
             savedStatusList = currentState.savedStatusList,

@@ -2,7 +2,6 @@ package com.stackstocks.statussaver.presentation.ui.status
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -15,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import com.stackstocks.statussaver.core.logging.AppLogger
+import com.stackstocks.statussaver.core.logging.LogTags
 import com.stackstocks.statussaver.core.utils.FileUtils
 import com.stackstocks.statussaver.core.utils.PreferenceUtils
 import com.stackstocks.statussaver.core.utils.StatusSaver
@@ -29,8 +30,13 @@ import androidx.compose.runtime.LaunchedEffect
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun StandaloneStatusGallery(context: Context) {
+    AppLogger.i(LogTags.SCREEN, "🎨 StatusGalleryScreen composing...")
+    
     // State management
-    var state by remember { mutableStateOf(StatusGalleryState()) }
+    var state by remember { 
+        AppLogger.d(LogTags.SCREEN, "Initializing StatusGalleryState")
+        mutableStateOf(StatusGalleryState()) 
+    }
     val coroutineScope = rememberCoroutineScope()
     
     // Pager state for swipeable tabs
@@ -66,10 +72,13 @@ fun StandaloneStatusGallery(context: Context) {
 
     // Initial load
     LaunchedEffect(Unit) {
+        AppLogger.i(LogTags.SCREEN, "📥 Initial load LaunchedEffect triggered")
         coroutineScope.launch {
+            AppLogger.d(LogTags.COROUTINE, "Launching loadStatuses coroutine...")
             loadStatuses(context, state) { newState -> state = newState }
         }
         coroutineScope.launch {
+            AppLogger.d(LogTags.COROUTINE, "Launching loadSavedStatuses coroutine...")
             loadSavedStatuses(context, state) { newState -> state = newState }
         }
     }
@@ -95,7 +104,7 @@ fun StandaloneStatusGallery(context: Context) {
             override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
                 super.onStart(owner)
                 // App came to foreground, check for new statuses
-                Log.d("StatusGalleryActivity", "App came to foreground, checking for new statuses")
+                AppLogger.d(LogTags.LIFECYCLE, "App came to foreground, checking for new statuses")
                 
                 // Check for new statuses based on current tab
                 if (state.currentTab == 0) {
@@ -115,16 +124,16 @@ fun StandaloneStatusGallery(context: Context) {
                                 
                                 // Only update if there are actual changes
                                 if (newHash != state.lastStatusesHash) {
-                                    Log.d("StatusGalleryActivity", "New statuses detected, updating UI")
+                                    AppLogger.i(LogTags.STATUS_LOADING, "New statuses detected, updating UI")
                                     state = state.copy(
                                         statusList = newStatuses,
                                         lastStatusesHash = newHash
                                     )
                                 } else {
-                                    Log.d("StatusGalleryActivity", "No new statuses found")
+                                    AppLogger.d(LogTags.STATUS_LOADING, "No new statuses found")
                                 }
                             } catch (e: Exception) {
-                                Log.e("StatusGalleryActivity", "Error checking for new statuses", e)
+                                AppLogger.e(LogTags.ERROR, "Error checking for new statuses", e)
                             }
                         }
                     }
@@ -140,17 +149,17 @@ fun StandaloneStatusGallery(context: Context) {
                             
                             // Only update if there are actual changes
                             if (newHash != state.lastSavedStatusesHash) {
-                                Log.d("StatusGalleryActivity", "New saved statuses detected, updating UI")
+                                AppLogger.i(LogTags.STATUS_LOADING, "New saved statuses detected, updating UI")
                                 state = state.copy(
                                     savedStatusList = newSavedStatuses,
                                     favoriteList = newFavorites,
                                     lastSavedStatusesHash = newHash
                                 )
                             } else {
-                                Log.d("StatusGalleryActivity", "No new saved statuses found")
+                                AppLogger.d(LogTags.STATUS_LOADING, "No new saved statuses found")
                             }
                         } catch (e: Exception) {
-                            Log.e("StatusGalleryActivity", "Error checking for new saved statuses", e)
+                            AppLogger.e(LogTags.ERROR, "Error checking for new saved statuses", e)
                         }
                     }
                 }
@@ -189,14 +198,14 @@ fun StandaloneStatusGallery(context: Context) {
                             
                             // Only update if there are actual changes
                             if (newHash != state.lastStatusesHash) {
-                                Log.d("StatusGalleryActivity", "New statuses detected during background check, updating UI")
+                                AppLogger.i(LogTags.STATUS_LOADING, "New statuses detected during background check, updating UI")
                                 state = state.copy(
                                     statusList = newStatuses,
                                     lastStatusesHash = newHash
                                 )
                             }
                         } catch (e: Exception) {
-                            Log.e("StatusGalleryActivity", "Error during background status check", e)
+                            AppLogger.e(LogTags.ERROR, "Error during background status check", e)
                         }
                     }
                 } else {
@@ -210,7 +219,7 @@ fun StandaloneStatusGallery(context: Context) {
                         
                         // Only update if there are actual changes
                         if (newHash != state.lastSavedStatusesHash) {
-                            Log.d("StatusGalleryActivity", "New saved statuses detected during background check, updating UI")
+                            AppLogger.i(LogTags.STATUS_LOADING, "New saved statuses detected during background check, updating UI")
                             state = state.copy(
                                 savedStatusList = newSavedStatuses,
                                 favoriteList = newFavorites,
@@ -218,7 +227,7 @@ fun StandaloneStatusGallery(context: Context) {
                             )
                         }
                     } catch (e: Exception) {
-                        Log.e("StatusGalleryActivity", "Error during background saved status check", e)
+                        AppLogger.e(LogTags.ERROR, "Error during background saved status check", e)
                     }
                 }
             }
@@ -441,7 +450,7 @@ fun StandaloneStatusGallery(context: Context) {
                                 savedStatusList = state.savedStatusList + status
                             )
                         }
-                        Log.e("StatusGalleryActivity", "Failed to delete saved status")
+                        AppLogger.e(LogTags.ERROR, "Failed to delete saved status")
                     }
                 } catch (e: Exception) {
                     // Revert optimistic update on error
@@ -455,7 +464,7 @@ fun StandaloneStatusGallery(context: Context) {
                             savedStatusList = state.savedStatusList + status
                         )
                     }
-                    Log.e("StatusGalleryActivity", "Error deleting saved status", e)
+                    AppLogger.e(LogTags.ERROR, "Error deleting saved status", e)
                 }
             }
         }
